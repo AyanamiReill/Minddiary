@@ -1,7 +1,7 @@
-name: Build iOS IPA (Node 22 Edition)
+name: Build iOS IPA (Force Expo Install)
 
 on:
-  workflow_dispatch: # 仅手动触发，避免每次 Commit 都乱跑
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,26 +14,32 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # 提升到 Node 22，彻底解决 styleText 报错
+          node-version: 22
 
       - name: Install Dependencies
         run: |
-          # 强制安装 expo 以确保 prebuild 脚本能运行
+          # 1. 先安装基础依赖
           npm install --legacy-peer-deps
+          # 2. 强制把 expo 装进 node_modules，解决 "Cannot determine SDK version"
+          npm install expo@latest --legacy-peer-deps
 
       - name: Prebuild iOS Project
         run: |
-          # 运行 prebuild 前先确保有 expo
-          npx expo prebuild --platform ios --no-install
+          # 3. 强制注入一个 Bundle ID，这是 iOS 编译必须的身份证号
+          # 我们直接用 npx expo prebuild，它会自动补齐缺少的 ios 文件夹
+          npx expo prebuild --platform ios --no-install --non-interactive
 
       - name: Install CocoaPods
         run: |
           cd ios
+          # 检查是否有 Podfile，如果没有则报错，方便排查
+          if [ ! -f "Podfile" ]; then echo "Podfile not found!"; exit 1; fi
           pod install --repo-update
           cd ..
 
       - name: Build iOS App
         run: |
+          # 4. 自动寻找项目名称并进行 Release 编译
           PROJECT_NAME=$(ls ios | grep .xcodeproj | cut -f 1 -d '.')
           xcodebuild -workspace ios/$PROJECT_NAME.xcworkspace \
             -scheme $PROJECT_NAME \
@@ -49,6 +55,10 @@ jobs:
         run: |
           mkdir -p Payload
           APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Could not find .app file."
+            exit 1
+          fi
           cp -r "$APP_PATH" Payload/
           zip -r Minddiary_unsigned.ipa Payload
 
