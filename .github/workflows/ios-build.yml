@@ -1,11 +1,11 @@
-name: Build iOS IPA (Unsigned)
+name: Build iOS IPA (Expo Prebuild)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest # 使用最通用的标签
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
@@ -14,24 +14,29 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18 # 升级到 18，兼容性更好
+          node-version: 18
 
       - name: Install Dependencies
         run: |
           npm install --legacy-peer-deps
 
+      - name: Prebuild iOS Project
+        run: |
+          # Expo 项目需要先生成 ios 文件夹
+          # 我们在这里手动注入一个 Bundle ID，否则 prebuild 会失败
+          npx expo prebuild --platform ios --no-install --template blank
+
       - name: Install CocoaPods
         run: |
           cd ios
-          # 针对新版 Mac 环境的修复
           pod install --repo-update
           cd ..
 
       - name: Build iOS App
         run: |
-          # 关键：由于没有签名，我们只编译出 .app 文件
-          xcodebuild -workspace ios/Minddiary.xcworkspace \
-            -scheme Minddiary \
+          # 自动获取生成的项目名称并编译
+          xcodebuild -workspace ios/*.xcworkspace \
+            -scheme $(ls ios | grep .xcodeproj | cut -f 1 -d '.') \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
@@ -43,7 +48,6 @@ jobs:
       - name: Create IPA Package
         run: |
           mkdir -p Payload
-          # 自动寻找编译生成的 .app 文件夹
           APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
           if [ -z "$APP_PATH" ]; then
             echo "Error: Could not find .app file."
