@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13 # 指定使用 macOS 13 确保兼容性
+    runs-on: macos-latest # 重新使用 latest，它是最可靠的动态指定
 
     steps:
       - name: Checkout repository
@@ -14,16 +14,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: '16.x' # 针对旧项目，Node 16 可能更稳定，也可以尝试 '18.x' 或 '20.x'
 
       - name: Install Dependencies
         run: |
           npm install --legacy-peer-deps
+          # 也可以尝试 yarn install --legacy-peer-deps 如果项目更倾向于 yarn
 
       - name: Install CocoaPods
         run: |
           cd ios
-          pod install
+          pod install --repo-update # 增加 --repo-update 确保 CocoaPods 仓库是最新的
           cd ..
 
       - name: Build iOS App
@@ -36,12 +37,15 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_ENTITLEMENTS="" \
-            CODE_SIGNING_METHOD=manual
+            CODE_SIGNING_METHOD=manual \
+            -quiet # 减少输出，聚焦错误
 
       - name: Create IPA Package
         run: |
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/Minddiary.app Payload/
+          # 检查实际生成的 .app 名称，有时候可能不是 Minddiary.app
+          # 可以先ls -l build/Build/Products/Release-iphoneos/ 看看真实文件名
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
           zip -r Minddiary_unsigned.ipa Payload
 
       - name: Upload Artifact
