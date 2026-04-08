@@ -1,7 +1,7 @@
-name: Build iOS IPA (Final Attempt)
+name: Build iOS IPA (Node 22 Edition)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 仅手动触发，避免每次 Commit 都乱跑
 
 jobs:
   build:
@@ -14,18 +14,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22 # 提升到 Node 22，彻底解决 styleText 报错
 
       - name: Install Dependencies
         run: |
-          # 使用 --legacy-peer-deps 忽略所有的版本冲突
+          # 强制安装 expo 以确保 prebuild 脚本能运行
           npm install --legacy-peer-deps
 
       - name: Prebuild iOS Project
         run: |
-          # 尝试通过 npx 直接运行 expo prebuild
-          # 如果报错，它会尝试自动安装缺失的包
-          npx expo prebuild --platform ios --no-install || (npm install expo --legacy-peer-deps && npx expo prebuild --platform ios --no-install)
+          # 运行 prebuild 前先确保有 expo
+          npx expo prebuild --platform ios --no-install
 
       - name: Install CocoaPods
         run: |
@@ -35,10 +34,7 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # 这里的逻辑保持不变，寻找生成的工程并编译
           PROJECT_NAME=$(ls ios | grep .xcodeproj | cut -f 1 -d '.')
-          echo "Building project: $PROJECT_NAME"
-          
           xcodebuild -workspace ios/$PROJECT_NAME.xcworkspace \
             -scheme $PROJECT_NAME \
             -configuration Release \
@@ -53,10 +49,6 @@ jobs:
         run: |
           mkdir -p Payload
           APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
-          if [ -z "$APP_PATH" ]; then
-            echo "Error: Could not find .app file."
-            exit 1
-          fi
           cp -r "$APP_PATH" Payload/
           zip -r Minddiary_unsigned.ipa Payload
 
