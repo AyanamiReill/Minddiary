@@ -1,4 +1,4 @@
-name: Build iOS IPA (Expo Fixed)
+name: Build iOS IPA (Final Attempt)
 
 on:
   workflow_dispatch:
@@ -14,19 +14,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # 升级到 Node 20 以满足最新 Expo 要求
+          node-version: 20
 
       - name: Install Dependencies
         run: |
-          # 强制安装 expo 以确保 prebuild 脚本能运行
-          npm install expo --save
+          # 使用 --legacy-peer-deps 忽略所有的版本冲突
           npm install --legacy-peer-deps
 
       - name: Prebuild iOS Project
         run: |
-          # 确保 app.json 中有必要的 bundleIdentifier
-          # 如果没有，prebuild 会报错
-          npx expo prebuild --platform ios --no-install
+          # 尝试通过 npx 直接运行 expo prebuild
+          # 如果报错，它会尝试自动安装缺失的包
+          npx expo prebuild --platform ios --no-install || (npm install expo --legacy-peer-deps && npx expo prebuild --platform ios --no-install)
 
       - name: Install CocoaPods
         run: |
@@ -35,6 +34,38 @@ jobs:
           cd ..
 
       - name: Build iOS App
+        run: |
+          # 这里的逻辑保持不变，寻找生成的工程并编译
+          PROJECT_NAME=$(ls ios | grep .xcodeproj | cut -f 1 -d '.')
+          echo "Building project: $PROJECT_NAME"
+          
+          xcodebuild -workspace ios/$PROJECT_NAME.xcworkspace \
+            -scheme $PROJECT_NAME \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_METHOD=manual \
+            -quiet
+
+      - name: Create IPA Package
+        run: |
+          mkdir -p Payload
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Could not find .app file."
+            exit 1
+          fi
+          cp -r "$APP_PATH" Payload/
+          zip -r Minddiary_unsigned.ipa Payload
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: Minddiary_unsigned.ipa
+          retention-days: 1      - name: Build iOS App
         run: |
           # 动态寻找生成的项目名称
           PROJECT_NAME=$(ls ios | grep .xcodeproj | cut -f 1 -d '.')
