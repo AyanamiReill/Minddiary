@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13 # 强制使用 macOS 13，因为它自带的 Xcode 14/15 对旧项目更友好
+    runs-on: macos-latest # 使用最通用的标签
 
     steps:
       - name: Checkout repository
@@ -14,7 +14,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version: 18 # 升级到 18，兼容性更好
 
       - name: Install Dependencies
         run: |
@@ -23,13 +23,13 @@ jobs:
       - name: Install CocoaPods
         run: |
           cd ios
-          # 修复一些旧版 RN 在新环境下的 Ruby 兼容性问题
-          gem install cocoapods
+          # 针对新版 Mac 环境的修复
           pod install --repo-update
           cd ..
 
       - name: Build iOS App
         run: |
+          # 关键：由于没有签名，我们只编译出 .app 文件
           xcodebuild -workspace ios/Minddiary.xcworkspace \
             -scheme Minddiary \
             -configuration Release \
@@ -37,21 +37,19 @@ jobs:
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_ENTITLEMENTS="" \
             CODE_SIGNING_METHOD=manual \
-            OTHER_LDFLAGS='$(inherited) -Wl,-weak_reference_mismatches,privileged' \
-            | xcpretty || true
-          # 使用 xcpretty 格式化输出，如果失败了也继续，方便我们看 Payload 里的情况
-
-      - name: Check if App exists
-        run: |
-          ls -R build/Build/Products/Release-iphoneos/
+            -quiet
 
       - name: Create IPA Package
         run: |
           mkdir -p Payload
-          # 找到生成的 .app 并复制
-          find build/Build/Products/Release-iphoneos -name "*.app" -exec cp -r {} Payload/ \;
+          # 自动寻找编译生成的 .app 文件夹
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Could not find .app file."
+            exit 1
+          fi
+          cp -r "$APP_PATH" Payload/
           zip -r Minddiary_unsigned.ipa Payload
 
       - name: Upload Artifact
