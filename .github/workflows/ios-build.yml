@@ -1,0 +1,52 @@
+name: Build iOS IPA (Unsigned)
+
+on:
+  workflow_dispatch: # 允许手动触发构建
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: |
+          yarn install
+          # 如果报错，可以尝试 npm install --legacy-peer-deps
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+          cd ..
+
+      - name: Build iOS App
+        run: |
+          xcodebuild -workspace ios/Minddiary.xcworkspace \
+            -scheme Minddiary \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_ENTITLEMENTS="" \
+            CODE_SIGNING_METHOD=manual
+
+      - name: Create IPA Package
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/Minddiary.app Payload/
+          zip -r Minddiary_unsigned.ipa Payload
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-ipa
+          path: Minddiary_unsigned.ipa
