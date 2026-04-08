@@ -1,25 +1,24 @@
 name: Build iOS IPA (Unsigned)
 
 on:
-  workflow_dispatch: # 允许手动触发构建
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-13 # 指定使用 macOS 13 确保兼容性
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
       - name: Install Dependencies
         run: |
-          yarn install
-          # 如果报错，可以尝试 npm install --legacy-peer-deps
+          npm install --legacy-peer-deps
 
       - name: Install CocoaPods
         run: |
@@ -46,7 +45,8 @@ jobs:
           zip -r Minddiary_unsigned.ipa Payload
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
           path: Minddiary_unsigned.ipa
+          retention-days: 1
