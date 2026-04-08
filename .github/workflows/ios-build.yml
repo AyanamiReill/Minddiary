@@ -1,11 +1,11 @@
 name: Build iOS IPA (Unsigned)
 
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest # 重新使用 latest，它是最可靠的动态指定
+    runs-on: macos-13 # 强制使用 macOS 13，因为它自带的 Xcode 14/15 对旧项目更友好
 
     steps:
       - name: Checkout repository
@@ -14,17 +14,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '16.x' # 针对旧项目，Node 16 可能更稳定，也可以尝试 '18.x' 或 '20.x'
+          node-version: 16
 
       - name: Install Dependencies
         run: |
           npm install --legacy-peer-deps
-          # 也可以尝试 yarn install --legacy-peer-deps 如果项目更倾向于 yarn
 
       - name: Install CocoaPods
         run: |
           cd ios
-          pod install --repo-update # 增加 --repo-update 确保 CocoaPods 仓库是最新的
+          # 修复一些旧版 RN 在新环境下的 Ruby 兼容性问题
+          gem install cocoapods
+          pod install --repo-update
           cd ..
 
       - name: Build iOS App
@@ -38,14 +39,19 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_ENTITLEMENTS="" \
             CODE_SIGNING_METHOD=manual \
-            -quiet # 减少输出，聚焦错误
+            OTHER_LDFLAGS='$(inherited) -Wl,-weak_reference_mismatches,privileged' \
+            | xcpretty || true
+          # 使用 xcpretty 格式化输出，如果失败了也继续，方便我们看 Payload 里的情况
+
+      - name: Check if App exists
+        run: |
+          ls -R build/Build/Products/Release-iphoneos/
 
       - name: Create IPA Package
         run: |
           mkdir -p Payload
-          # 检查实际生成的 .app 名称，有时候可能不是 Minddiary.app
-          # 可以先ls -l build/Build/Products/Release-iphoneos/ 看看真实文件名
-          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
+          # 找到生成的 .app 并复制
+          find build/Build/Products/Release-iphoneos -name "*.app" -exec cp -r {} Payload/ \;
           zip -r Minddiary_unsigned.ipa Payload
 
       - name: Upload Artifact
