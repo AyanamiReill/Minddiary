@@ -1,4 +1,4 @@
-name: Build iOS IPA (Expo Prebuild)
+name: Build iOS IPA (Expo Fixed)
 
 on:
   workflow_dispatch:
@@ -14,17 +14,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20 # 升级到 Node 20 以满足最新 Expo 要求
 
       - name: Install Dependencies
         run: |
+          # 强制安装 expo 以确保 prebuild 脚本能运行
+          npm install expo --save
           npm install --legacy-peer-deps
 
       - name: Prebuild iOS Project
         run: |
-          # Expo 项目需要先生成 ios 文件夹
-          # 我们在这里手动注入一个 Bundle ID，否则 prebuild 会失败
-          npx expo prebuild --platform ios --no-install --template blank
+          # 确保 app.json 中有必要的 bundleIdentifier
+          # 如果没有，prebuild 会报错
+          npx expo prebuild --platform ios --no-install
 
       - name: Install CocoaPods
         run: |
@@ -34,9 +36,12 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # 自动获取生成的项目名称并编译
-          xcodebuild -workspace ios/*.xcworkspace \
-            -scheme $(ls ios | grep .xcodeproj | cut -f 1 -d '.') \
+          # 动态寻找生成的项目名称
+          PROJECT_NAME=$(ls ios | grep .xcodeproj | cut -f 1 -d '.')
+          echo "Building project: $PROJECT_NAME"
+          
+          xcodebuild -workspace ios/$PROJECT_NAME.xcworkspace \
+            -scheme $PROJECT_NAME \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
