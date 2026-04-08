@@ -1,4 +1,4 @@
-name: Build iOS IPA (Force Expo Install)
+name: Build iOS IPA (Full Dependency Fix)
 
 on:
   workflow_dispatch:
@@ -14,32 +14,34 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20 # 使用 Expo 推荐的稳定版 20
 
-      - name: Install Dependencies
+      - name: Force Install Dependencies
         run: |
-          # 1. 先安装基础依赖
+          # 1. 彻底清空并重新安装核心依赖
           npm install --legacy-peer-deps
-          # 2. 强制把 expo 装进 node_modules，解决 "Cannot determine SDK version"
-          npm install expo@latest --legacy-peer-deps
+          # 2. 显式地安装 react-native 和 expo，确保它们出现在 node_modules 里
+          npm install react-native expo --legacy-peer-deps
 
       - name: Prebuild iOS Project
         run: |
-          # 3. 强制注入一个 Bundle ID，这是 iOS 编译必须的身份证号
-          # 我们直接用 npx expo prebuild，它会自动补齐缺少的 ios 文件夹
+          # 3. 生成 ios 目录
           npx expo prebuild --platform ios --no-install --non-interactive
+
+      - name: Debug Node Modules (Optional)
+        run: |
+          # 检查 react-native 是否真的存在，方便报错时排查
+          ls node_modules/react-native/package.json || echo "React Native NOT FOUND!"
 
       - name: Install CocoaPods
         run: |
+          # 4. 进入 ios 目录安装，并告诉系统到上级目录找 node_modules
           cd ios
-          # 检查是否有 Podfile，如果没有则报错，方便排查
-          if [ ! -f "Podfile" ]; then echo "Podfile not found!"; exit 1; fi
           pod install --repo-update
           cd ..
 
       - name: Build iOS App
         run: |
-          # 4. 自动寻找项目名称并进行 Release 编译
           PROJECT_NAME=$(ls ios | grep .xcodeproj | cut -f 1 -d '.')
           xcodebuild -workspace ios/$PROJECT_NAME.xcworkspace \
             -scheme $PROJECT_NAME \
